@@ -442,14 +442,14 @@ async function webpUnder(img,size,max){const c=await sizedCanvas(img,size,size);
 async function pngUnder(img,size,max){let s=size;for(let i=0;i<6;i++){const b=await toBlob(await sizedCanvas(img,s,s));if(b.size<=max)return b;s=Math.round(s*.9)}return toBlob(await sizedCanvas(img,s,s))}
 async function packIconImg(st){return blobImg(PK.icon||st[0].png)}
 $('#pk-export').onclick=async()=>{const st=await packStickers(PK.id);if(!st.length)return bxAlert('Add some stickers first.');
-  const v=await menu('Export "'+PK.name+'"',[{label:'WhatsApp',sub:'.wastickers file, 512 px WebP + 96 px icon',value:'wa'},{label:'Telegram',sub:'Zip of 512 px stickers + 100 px icon',value:'tg'},{label:'Discord',sub:'Zip of 320 px PNG stickers',value:'dc'},{label:'Other apps',sub:'Zip of 512 px PNG + WebP pictures and the icon',value:'png'}]);if(!v)return;
+  const v=await menu('Export "'+PK.name+'"',[{label:'WhatsApp',sub:'.wastickers file, 512 px stickers + 96 px icon',value:'wa'},{label:'Telegram',sub:'Zip of 512 px stickers + 100 px icon',value:'tg'},{label:'Discord',sub:'Zip of 320 px PNG stickers',value:'dc'},{label:'Other apps',sub:'Zip of 512 px PNG + WebP pictures and the icon',value:'png'}]);if(!v)return;
   const busy=h('div',{class:'ov'},h('div',{style:'color:#fff;font-size:15px'},'Making files...'));document.body.append(busy);
   try{const imgs=[];for(const s of st)imgs.push(await blobImg(s.png));const ico=await packIconImg(st);const base=safeName(PK.name);let out=[],help='';
     if(v==='wa'){if(st.length<3){busy.remove();return bxAlert('WhatsApp needs at least 3 stickers in a pack. This one has '+st.length+'.')}
       const tray=await pngUnder(ico,96,50*1024);const enc=new TextEncoder();const chunks=[];for(let i=0;i<imgs.length;i+=30)chunks.push(imgs.slice(i,i+30));
       for(let c=0;c<chunks.length;c++){if(chunks[c].length<3&&c>0){chunks[c-1].push(...chunks[c]);chunks.splice(c,1)}}
-      for(let c=0;c<chunks.length;c++){const nm=PK.name+(chunks.length>1?' '+(c+1):'');const files=[{name:'title.txt',data:enc.encode(nm)},{name:'author.txt',data:enc.encode(PK.author||'Sticker Maker')},{name:'tray.png',data:tray}];
-        for(let i=0;i<chunks[c].length;i++)files.push({name:String(i+1).padStart(2,'0')+'.webp',data:await webpUnder(chunks[c][i],512,100*1024)});
+      for(let c=0;c<chunks.length;c++){const nm=PK.name+(chunks.length>1?' '+(c+1):'');const files=[{name:'cover.png',data:tray},{name:'author.txt',data:enc.encode(PK.author||'Sticker Maker')},{name:'title.txt',data:enc.encode(nm)}];
+        for(let i=0;i<chunks[c].length;i++){let d=await toBlob(await sizedCanvas(chunks[c][i],512,512));let ext='.png';if(d.size>100000){d=await webpUnder(chunks[c][i],512,100000);ext='.webp'}files.push({name:String(i+1).padStart(2,'0')+ext,data:d})}
         out.push(new File([await makeZip(files)],safeName(nm)+'.wastickers',{type:'application/octet-stream'}))}
       help='Open the .wastickers file with a sticker importer app (for example "Sticker Maker" from the Play Store) and tap Add to WhatsApp. WhatsApp itself can\'t take a pack straight from a file. To send one sticker right away, tap it and choose Send.'}
     if(v==='tg'){const files=[{name:'icon.png',data:await pngUnder(ico,100,32*1024)}];for(let i=0;i<imgs.length;i++){let b=await toBlob(await sizedCanvas(imgs[i],512,512));if(b.size>512*1024)b=await webpUnder(imgs[i],512,500*1024);files.push({name:String(i+1).padStart(2,'0')+(b.type==='image/webp'?'.webp':'.png'),data:b})}
@@ -476,9 +476,9 @@ async function readZip(blob){const buf=new Uint8Array(await blob.arrayBuffer());
 $('#imppack').onclick=()=>{const f=$('#zfile');f.value='';f.onchange=async()=>{const file=f.files[0];if(!file)return;try{await importPack(file)}catch(e){console.error(e);bxAlert('That file could not be read as a sticker pack.')}};f.click()};
 async function importPack(file){const ents=await readZip(file);const txt=n=>{const e=ents.find(x=>x.name.split('/').pop().toLowerCase()===n);return e?new TextDecoder().decode(e.data).trim():''};
   const isImg=n=>/\.(png|webp|jpe?g|gif)$/i.test(n);const typ=n=>/\.webp$/i.test(n)?'image/webp':/\.jpe?g$/i.test(n)?'image/jpeg':/\.gif$/i.test(n)?'image/gif':'image/png';
-  let pics=ents.filter(e=>isImg(e.name)&&!/(^|\/)(tray|icon)\.(png|webp)$/i.test(e.name));const hasPng=pics.some(e=>/\.png$/i.test(e.name));if(hasPng&&pics.some(e=>/\.webp$/i.test(e.name)))pics=pics.filter(e=>/\.png$/i.test(e.name));
+  let pics=ents.filter(e=>isImg(e.name)&&!/(^|\/)(tray|icon|cover)\.(png|webp)$/i.test(e.name));const hasPng=pics.some(e=>/\.png$/i.test(e.name));if(hasPng&&pics.some(e=>/\.webp$/i.test(e.name)))pics=pics.filter(e=>/\.png$/i.test(e.name));
   pics.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));if(!pics.length)throw new Error('no pictures');
-  const iconE=ents.find(e=>/(^|\/)icon\.(png|webp)$/i.test(e.name))||ents.find(e=>/(^|\/)tray\.(png|webp)$/i.test(e.name));
+  const iconE=ents.find(e=>/(^|\/)icon\.(png|webp)$/i.test(e.name))||ents.find(e=>/(^|\/)(tray|cover)\.(png|webp)$/i.test(e.name));
   const name=txt('title.txt')||file.name.replace(/\.(zip|wastickers)$/i,'').replace(/-(stickers|telegram|discord)$/,'');
   const p={id:uid(),name,author:txt('author.txt'),icon:null,created:Date.now()};
   const to512=async b=>{const im=await blobImg(b);return toBlob(await sizedCanvas(im,512,512))};
